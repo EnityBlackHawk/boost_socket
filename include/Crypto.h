@@ -18,4 +18,11 @@ namespace Crypto {
                                        const std::vector<unsigned char>& encrypted_data);
     std::vector<unsigned char> generate_random_bytes(size_t length);
 
+    std::vector<unsigned char> rsa_sign(const std::string& privkey_path,
+                                    const std::string& message);
+
+    bool rsa_verify(const std::string& pubkey_path,
+                const std::string& message,
+                const std::vector<unsigned char>& signature);
+
 }

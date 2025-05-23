@@ -115,3 +115,63 @@ std::vector<unsigned char> Crypto::rsa_decrypt(const std::string& privkey_path,
     EVP_PKEY_free(pkey);
     return out;
 }
+
+std::vector<unsigned char> Crypto::rsa_sign(const std::string& privkey_path,
+                                    const std::string& message) {
+    FILE* fp = fopen(privkey_path.c_str(), "rb");
+    if (!fp) throw std::runtime_error("Erro ao abrir chave privada");
+
+    EVP_PKEY* pkey = PEM_read_PrivateKey(fp, nullptr, nullptr, nullptr);
+    fclose(fp);
+    if (!pkey) throw std::runtime_error("Erro ao ler chave privada");
+
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) throw std::runtime_error("Erro ao criar contexto");
+
+    if (EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) <= 0)
+        throw std::runtime_error("Erro em DigestSignInit");
+
+    if (EVP_DigestSignUpdate(ctx, message.data(), message.size()) <= 0)
+        throw std::runtime_error("Erro em DigestSignUpdate");
+
+    size_t siglen = 0;
+    EVP_DigestSignFinal(ctx, nullptr, &siglen);
+
+    std::vector<unsigned char> signature(siglen);
+    if (EVP_DigestSignFinal(ctx, signature.data(), &siglen) <= 0)
+        throw std::runtime_error("Erro em DigestSignFinal");
+
+    signature.resize(siglen);
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+    return signature;
+}
+
+
+bool Crypto::rsa_verify(const std::string& pubkey_path,
+                const std::string& message,
+                const std::vector<unsigned char>& signature) {
+    FILE* fp = fopen(pubkey_path.c_str(), "rb");
+    if (!fp) throw std::runtime_error("Erro ao abrir chave pública");
+
+    EVP_PKEY* pkey = PEM_read_PUBKEY(fp, nullptr, nullptr, nullptr);
+    fclose(fp);
+    if (!pkey) throw std::runtime_error("Erro ao ler chave pública");
+
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) throw std::runtime_error("Erro ao criar contexto");
+
+    if (EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) <= 0)
+        throw std::runtime_error("Erro em DigestVerifyInit");
+
+    if (EVP_DigestVerifyUpdate(ctx, message.data(), message.size()) <= 0)
+        throw std::runtime_error("Erro em DigestVerifyUpdate");
+
+    const int result = EVP_DigestVerifyFinal(ctx, signature.data(), signature.size());
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+
+    return result == 1;
+}
+
+

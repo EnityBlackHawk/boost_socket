@@ -58,14 +58,16 @@ int main() {
             auto aes_iv = Crypto::generate_random_bytes(16);
 
             auto encrypted_message = Crypto::encrypt_aes(msg, aes_key, aes_iv);
+
             auto hash = Crypto::sha256(msg);
+            auto sign = Crypto::rsa_sign("../client_private.pem", msg);
 
             std::vector<unsigned char> secret_payload;
             secret_payload.insert(secret_payload.end(), aes_key.begin(), aes_key.end());
             secret_payload.insert(secret_payload.end(), aes_iv.begin(), aes_iv.end());
             secret_payload.insert(secret_payload.end(), hash.begin(), hash.end());
 
-            auto rsa_encrypted = Crypto::rsa_encrypt("../public.pem", secret_payload);
+            auto rsa_encrypted = Crypto::rsa_encrypt("../server_public.pem", secret_payload);
 
             uint32_t rsa_len = rsa_encrypted.size();
             socket.write_some(boost::asio::buffer(&rsa_len, sizeof(rsa_len)));
@@ -74,6 +76,11 @@ int main() {
             uint32_t enc_len = encrypted_message.size();
             socket.write_some(boost::asio::buffer(&enc_len, sizeof(enc_len)));
             socket.write_some(boost::asio::buffer(encrypted_message));
+
+            uint32_t signLen = sign.size();
+            socket.write_some(boost::asio::buffer(&signLen, sizeof(signLen)));
+            socket.write_some(boost::asio::buffer(sign));
+
         }
 
     } catch (std::exception& e) {

@@ -16,8 +16,8 @@ void session(tcp::socket& socket) {
             std::vector<unsigned char> rsa_payload(rsa_len);
             boost::asio::read(socket, boost::asio::buffer(rsa_payload));
 
-            auto decrypted = Crypto::rsa_decrypt("../private.pem", rsa_payload);
-            if (decrypted.size() != (32 + 16 +32)) {
+            auto decrypted = Crypto::rsa_decrypt("../server_private.pem", rsa_payload);
+            if (decrypted.size() != (32 + 16 + 32)) {
                 throw std::runtime_error("RSA encryption failed");
             }
 
@@ -30,15 +30,26 @@ void session(tcp::socket& socket) {
             std::vector<unsigned char> encrypted_msg(msg_len);
             boost::asio::read(socket, boost::asio::buffer(encrypted_msg));
 
-            std::string message = Crypto::decrypt_aes(encrypted_msg, aes_key, aes_iv);
+            uint32_t sign_len = 0;
+            boost::asio::read(socket, boost::asio::buffer(&sign_len, sizeof(sign_len)));
+            std::vector<unsigned char> original_sign(sign_len);
+            boost::asio::read(socket, boost::asio::buffer(original_sign));
 
+            std::string message = Crypto::decrypt_aes(encrypted_msg, aes_key, aes_iv);
             auto computed_hash = Crypto::sha256(message);
+            const auto computed_sign = Crypto::rsa_verify("../client_public.pem", message, original_sign);
 
             std::cout << message;
             if (computed_hash == original_hash) {
-                std::cout << " -  Integridade verificada" << std::endl;
+                std::cout << "  ";
             } else {
-                std::cout << " - Integridade comprometida" << std::endl;
+                std::cout << " ❌";
+            }
+
+            if (computed_sign) {
+                std::cout << " " << std::endl;
+            } else {
+                std::cout << " 󰌿 Assinatura invalida" << std::endl;
             }
 
 
