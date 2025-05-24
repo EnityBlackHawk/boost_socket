@@ -8,6 +8,28 @@
 
 using boost::asio::ip::tcp;
 
+void writeLoop(tcp::socket& socket, const std::vector<unsigned char> aes_key, const std::vector<unsigned char> aes_iv) {
+    for (std::string msg; std::getline(std::cin, msg);) {
+
+        auto encrypted_message = Crypto::encrypt_aes(msg, aes_key, aes_iv);
+        auto hash = Crypto::sha256(msg);
+        auto sign = Crypto::rsa_sign("../server_private.pem", msg);
+
+        std::vector<unsigned char> payload;
+        payload.insert(payload.end(), hash.begin(), hash.end());
+        payload.insert(payload.end(), sign.begin(), sign.end());
+
+        uint32_t enc_len = encrypted_message.size();
+        boost::asio::write(socket, boost::asio::buffer(&enc_len, sizeof(enc_len)));
+        boost::asio::write(socket, boost::asio::buffer(encrypted_message));
+
+        uint32_t payloadLen = payload.size();
+        boost::asio::write(socket, boost::asio::buffer(&payloadLen, sizeof(payloadLen)));
+        boost::asio::write(socket, boost::asio::buffer(payload));
+
+    }
+}
+
 void session(tcp::socket& socket) {
     try {
         // Recebe handshake - certificado do cliente
@@ -45,6 +67,8 @@ void session(tcp::socket& socket) {
 
         std::cout << "Chave e iv recebidas" << std::endl;
 
+        std::thread(writeLoop, std::ref(socket), aes_key, aes_iv).detach();
+
         for (;;) {
 
             uint32_t msg_len = 0;
@@ -69,7 +93,7 @@ void session(tcp::socket& socket) {
             if (computed_hash == original_hash) {
                 std::cout << "  ";
             } else {
-                std::cout << " ❌";
+                std::cout << " ❌ Hash invalido";
             }
 
             if (computed_sign) {
@@ -77,20 +101,6 @@ void session(tcp::socket& socket) {
             } else {
                 std::cout << " 󰌿 Assinatura invalida" << std::endl;
             }
-
-
-            // char data[1024];
-            // boost::system::error_code error;
-            //
-            // size_t lenght = socket.read_some(boost::asio::buffer(data), error);
-            //
-            // if (error == boost::asio::error::eof) {
-            //     std::cout << "Client disconnected" << std::endl;
-            //     break;
-            // }
-            // if (error) {
-            //     throw boost::system::system_error(error);
-            // }
 
         }
     } catch (std::exception &e) {
@@ -109,14 +119,6 @@ int main() {
         tcp::socket sock(io);
         acceptor.accept(sock);
         std::thread tr(session, std::ref(sock));
-
-        // for (std::string msg; std::getline(std::cin, msg);) {
-        //     std::string hash = Crypto::sha256(msg);
-        //     std::string full = hash + msg;
-        //     std::string encrypted = Crypto::encrypt_aes(full, AES_KEY);
-        //     boost::asio::write(sock, boost::asio::buffer(encrypted));
-        //
-        // }
 
         tr.join();
 
