@@ -1,7 +1,9 @@
 #include <common.h>
 #include <Crypto.h>
+#include <fstream>
 #include <iostream>
 #include <boost/asio.hpp>
+#include <nlohmann/json.hpp>
 
 using boost::asio::ip::tcp;
 
@@ -52,34 +54,69 @@ int main() {
 
         //std::thread(session, std::ref(socket)).detach();
 
-        for (std::string msg; std::getline(std::cin, msg);) {
+        // Handshake - Envia certificado do cliente
+        std::ifstream cert_file("../client-cert.json");
+        nlohmann::json client_cert = nlohmann::json::parse(cert_file);
+        std::string client_cert_str = client_cert.dump();
+        std::cout << "Certificado do cliente: " << client_cert_str << std::endl;
 
-            auto aes_key = Crypto::generate_random_bytes(32);
-            auto aes_iv = Crypto::generate_random_bytes(16);
+        uint32_t cert_len = client_cert_str.size();
+        socket.write_some(boost::asio::buffer(&cert_len, sizeof(uint32_t)));
+        socket.write_some(boost::asio::buffer(client_cert_str));
+
+        // Recebe o certificado do servidor
+
+        uint32_t server_cert_len = 0;
+        boost::asio::read(socket, boost::asio::buffer(&server_cert_len, sizeof(uint32_t)));
+        std::vector<char> server_cert(server_cert_len);
+        boost::asio::read(socket, boost::asio::buffer(server_cert));
+        nlohmann::json server_cert_json = nlohmann::json::parse(server_cert);
+
+        std::ofstream tmp_server_public_file("../tmp_server_public_key.json");
+        tmp_server_public_file << server_cert_json["public_key"].get<std::string>();
+        tmp_server_public_file.close();
+
+        std::cout << "Servidor: " << server_cert_json["subject"] << std::endl;
+
+        // Envia key e iv para o servidor
+        auto aes_key = Crypto::generate_random_bytes(32);
+        auto aes_iv = Crypto::generate_random_bytes(16);
+
+        std::vector<unsigned char> secret_payload;
+        secret_payload.insert(secret_payload.end(), aes_key.begin(), aes_key.end());
+        secret_payload.insert(secret_payload.end(), aes_iv.begin(), aes_iv.end());
+
+        auto rsa_encrypted = Crypto::rsa_encrypt("../tmp_server_public_key.json", secret_payload);
+        uint32_t rsa_len = rsa_encrypted.size();
+        socket.write_some(boost::asio::buffer(&rsa_len, sizeof(rsa_len)));
+        socket.write_some(boost::asio::buffer(rsa_encrypted));
+
+
+        for (std::string msg; std::getline(std::cin, msg);) {
 
             auto encrypted_message = Crypto::encrypt_aes(msg, aes_key, aes_iv);
 
             auto hash = Crypto::sha256(msg);
             auto sign = Crypto::rsa_sign("../client_private.pem", msg);
 
-            std::vector<unsigned char> secret_payload;
-            secret_payload.insert(secret_payload.end(), aes_key.begin(), aes_key.end());
-            secret_payload.insert(secret_payload.end(), aes_iv.begin(), aes_iv.end());
-            secret_payload.insert(secret_payload.end(), hash.begin(), hash.end());
+            std::cout << "Hash: " << hash.size() << std::endl;
+            std::cout << "Signature: " << sign.size() << std::endl;
 
-            auto rsa_encrypted = Crypto::rsa_encrypt("../server_public.pem", secret_payload);
+            std::vector<unsigned char> payload;
+            payload.insert(payload.end(), hash.begin(), hash.end());
+            payload.insert(payload.end(), sign.begin(), sign.end());
 
-            uint32_t rsa_len = rsa_encrypted.size();
-            socket.write_some(boost::asio::buffer(&rsa_len, sizeof(rsa_len)));
-            socket.write_some(boost::asio::buffer(rsa_encrypted));
+            std::cout << "encrypted_message: " << encrypted_message.size() << std::endl;
 
             uint32_t enc_len = encrypted_message.size();
             socket.write_some(boost::asio::buffer(&enc_len, sizeof(enc_len)));
             socket.write_some(boost::asio::buffer(encrypted_message));
 
-            uint32_t signLen = sign.size();
-            socket.write_some(boost::asio::buffer(&signLen, sizeof(signLen)));
-            socket.write_some(boost::asio::buffer(sign));
+            std::cout << "Payload: " << payload.size() << std::endl;
+
+            uint32_t payloadLen = payload.size();
+            socket.write_some(boost::asio::buffer(&payloadLen, sizeof(payloadLen)));
+            socket.write_some(boost::asio::buffer(payload));
 
         }
 

@@ -1,0 +1,7 @@
+{
+  "subject": "Alice@example.com",
+  "issuer": "MyCA",
+  "valid_from": "2025-01-01T00:00:00Z",
+  "valid_to": "2026-01-01T00:00:00Z",
+  "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn7dE1OM9zYda4I3ibCXc\ntcOuvASzYe8sZHCHhugj1J8ziEAZYNlNsAYUve/PtTS6zWxXXyqYwPPRdMt90RHi\nfDFdq5cv2fueXRieGbNffAmvNRmADAl+bTtm7WUBloKoWC9FxlmzkuxjoSPDx4mI\nBkP9GgnbifUWwUeTXc8bc2XSJzZAsLan0RrFdNP10xKG3O8Y9XdGIQuWsqqROOq0\ntNc8h0gxeLq1C1qUhqjHtbFmtlKanRXozyvrXUbFPV3WIg2lubVdpan/gj94m2Go\nktpaAZfbsH29YLiJmOqpxMNZJYY3bw3vUyvi6xzEfThJZ2+t1Cvs8eHhRMMd/JDz\niwIDAQAB\n-----END PUBLIC KEY-----"
+}
