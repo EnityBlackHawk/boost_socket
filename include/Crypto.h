@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 namespace Crypto {
 
@@ -24,5 +25,9 @@ namespace Crypto {
     bool rsa_verify(const std::string& pubkey_path,
                 const std::string& message,
                 const std::vector<unsigned char>& signature);
+
+    bool verify_certificate_signature( const nlohmann::json& cert, const std::string& ca_public_key_file );
+    std::string base64_encode(const std::vector<unsigned char>& data);
+    nlohmann::json sign_certificate( const nlohmann::json& cert, const std::string& ca_private_key_file );
 
 }

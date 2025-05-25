@@ -67,11 +67,11 @@ int main() {
         tcp::socket socket(io);
         boost::asio::connect(socket, endpoints);
 
-        std::cout << "Conectado ao servidor. Digite mensagens:\n";
 
         // Handshake - Envia certificado do cliente
         std::ifstream cert_file("../client-cert.json");
         nlohmann::json client_cert = nlohmann::json::parse(cert_file);
+        client_cert = Crypto::sign_certificate(client_cert, "../ca_private.pem");
         std::string client_cert_str = client_cert.dump();
 
         uint32_t cert_len = client_cert_str.size();
@@ -85,6 +85,13 @@ int main() {
         std::vector<char> server_cert(server_cert_len);
         boost::asio::read(socket, boost::asio::buffer(server_cert));
         nlohmann::json server_cert_json = nlohmann::json::parse(server_cert);
+
+        // Verifica assinatura do servidor
+        if (Crypto::verify_certificate_signature(server_cert_json, "../ca_public.pem")) {
+            std::cout << "󰄳 Certificado do servidor verificado com sucesso." << std::endl;
+        } else {
+            std::cerr << "❎ Falha na verificação do certificado do servidor." << std::endl;
+        }
 
         std::ofstream tmp_server_public_file("../tmp_server_public_key.json");
         tmp_server_public_file << server_cert_json["public_key"].get<std::string>();
@@ -106,6 +113,8 @@ int main() {
         socket.write_some(boost::asio::buffer(rsa_encrypted));
 
         std::thread(session, std::ref(socket), aes_key, aes_iv).detach();
+
+        std::cout << "Conectado ao servidor. Digite mensagens:\n";
 
         for (std::string msg; std::getline(std::cin, msg);) {
 

@@ -40,6 +40,12 @@ void session(tcp::socket& socket) {
         boost::asio::read(socket, boost::asio::buffer(data));
         nlohmann::json client_cert = nlohmann::json::parse(data);
 
+        if (Crypto::verify_certificate_signature(client_cert, "../ca_public.pem")) {
+            std::cout << "󰄳 Certificado do cliente verificado com sucesso." << std::endl;
+        } else {
+            std::cerr << "❎ Falha na verificação do certificado do cliente." << std::endl;
+        }
+
         std::ofstream tmp_cliente_public_file("../tmp_client_public_key.json");
         tmp_cliente_public_file << client_cert["public_key"].get<std::string>();
         tmp_cliente_public_file.close();
@@ -49,6 +55,9 @@ void session(tcp::socket& socket) {
         // Envia handshake - certificado do servidor
         std::ifstream cert_file("../server-cert.json");
         nlohmann::json server_cert = nlohmann::json::parse(cert_file);
+
+        server_cert = Crypto::sign_certificate(server_cert, "../ca_private.pem");
+
         std::string server_cert_str = server_cert.dump();
         uint32_t server_cert_len = server_cert_str.size();
         boost::asio::write(socket, boost::asio::buffer(&server_cert_len, sizeof(uint32_t)));

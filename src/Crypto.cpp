@@ -7,7 +7,7 @@
 #include <openssl/pem.h>
 #include <fstream>
 #include <stdexcept>
-
+#include <iostream>
 
 std::vector<unsigned char> Crypto::generate_random_bytes(size_t length) {
     std::vector<unsigned char> buffer(length);
@@ -172,6 +172,70 @@ bool Crypto::rsa_verify(const std::string& pubkey_path,
     EVP_PKEY_free(pkey);
 
     return result == 1;
+}
+
+std::vector<unsigned char> base64_decode(const std::string& b64_input) {
+    BIO* bio, *b64;
+    int decodeLen = (b64_input.length() * 3) / 4;
+    std::vector<unsigned char> buffer(decodeLen);
+
+    bio = BIO_new_mem_buf(b64_input.data(), b64_input.size());
+    b64 = BIO_new(BIO_f_base64());
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);  // Sem quebras de linha
+    bio = BIO_push(b64, bio);
+
+    int len = BIO_read(bio, buffer.data(), buffer.size());
+    buffer.resize(len);
+
+    BIO_free_all(bio);
+    return buffer;
+}
+
+std::string Crypto::base64_encode(const std::vector<unsigned char>& data) {
+    BIO* bio = nullptr;
+    BIO* b64 = nullptr;
+    BUF_MEM* bufferPtr = nullptr;
+
+    b64 = BIO_new(BIO_f_base64());
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);  // Sem quebras de linha
+    bio = BIO_new(BIO_s_mem());
+    b64 = BIO_push(b64, bio);
+
+    BIO_write(b64, data.data(), data.size());
+    BIO_flush(b64);
+    BIO_get_mem_ptr(b64, &bufferPtr);
+
+    std::string encoded(bufferPtr->data, bufferPtr->length);
+    BIO_free_all(b64);
+    return encoded;
+}
+
+nlohmann::json Crypto::sign_certificate(
+    const nlohmann::json& cert,
+    const std::string& ca_private_key_file
+) {
+
+    std::string signed_data = cert.dump();
+    std::vector<unsigned char> signature = rsa_sign(ca_private_key_file, signed_data);
+
+    nlohmann::json signed_cert = cert;
+    signed_cert["signature"] = base64_encode(signature);
+    return signed_cert;
+}
+
+bool Crypto::verify_certificate_signature(
+    const nlohmann::json& cert,
+    const std::string& ca_public_key_file
+) {
+    std::string signature_b64 = cert["signature"].get<std::string>();
+    std::vector<unsigned char> signature = base64_decode(signature_b64);
+
+    nlohmann::json cert_copy = cert;
+    cert_copy.erase("signature");
+
+    std::string signed_data = cert_copy.dump();
+
+    return rsa_verify(ca_public_key_file, signed_data, signature);
 }
 
 
