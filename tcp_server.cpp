@@ -32,7 +32,7 @@ void writeLoop(tcp::socket& socket, const std::vector<unsigned char> aes_key, co
 
 void session(tcp::socket& socket) {
     try {
-        // Recebe handshake - certificado do cliente
+        /* Recebe handshake - certificado do cliente */
         uint32_t cert_len = 0;
         boost::asio::read(socket, boost::asio::buffer(&cert_len, sizeof(uint32_t)));
 
@@ -40,6 +40,7 @@ void session(tcp::socket& socket) {
         boost::asio::read(socket, boost::asio::buffer(data));
         nlohmann::json client_cert = nlohmann::json::parse(data);
 
+        /* Verifica certificado do cliente */
         if (Crypto::verify_certificate_signature(client_cert, "../ca_public.pem")) {
             std::cout << "󰄳 Certificado do cliente verificado com sucesso." << std::endl;
         } else {
@@ -52,7 +53,7 @@ void session(tcp::socket& socket) {
 
         std::cout << "Client: " << client_cert["subject"] << std::endl;
 
-        // Envia handshake - certificado do servidor
+        /* Envia handshake - certificado do servidor */
         std::ifstream cert_file("../server-cert.json");
         nlohmann::json server_cert = nlohmann::json::parse(cert_file);
 
@@ -63,7 +64,7 @@ void session(tcp::socket& socket) {
         boost::asio::write(socket, boost::asio::buffer(&server_cert_len, sizeof(uint32_t)));
         boost::asio::write(socket, boost::asio::buffer(server_cert_str));
 
-        // Recebe chave AES e IV
+        /* Recebe chave AES e IV */
         uint32_t en_secret_payload_len = 0;
         boost::asio::read(socket, boost::asio::buffer(&en_secret_payload_len, sizeof(uint32_t)));
         std::vector<unsigned char> secret_payload(en_secret_payload_len);
@@ -80,22 +81,26 @@ void session(tcp::socket& socket) {
 
         for (;;) {
 
+            /* Receve mensagem criptografada */
             uint32_t msg_len = 0;
             boost::asio::read(socket, boost::asio::buffer(&msg_len, sizeof(msg_len)));
             std::vector<unsigned char> encrypted_msg(msg_len);
             boost::asio::read(socket, boost::asio::buffer(encrypted_msg));
 
+            /* Recebe hash e assinatura */
             uint32_t payloadLen = 0;
             boost::asio::read(socket, boost::asio::buffer(&payloadLen, sizeof(payloadLen)));
             std::vector<unsigned char> payload(payloadLen);
             boost::asio::read(socket, boost::asio::buffer(payload));
 
+            /* Descriptografa mensagem */
             std::string message = Crypto::decrypt_aes(encrypted_msg, aes_key, aes_iv);
-
             const std::vector<unsigned char> original_hash(payload.begin(), payload.begin() + 32);
             const std::vector<unsigned char> original_sign(payload.begin() + 32, payload.end());
 
+            /* Calcula Hash da mensagem recebida */
             auto computed_hash = Crypto::sha256(message);
+            /* Verifica assinatura */
             const auto computed_sign = Crypto::rsa_verify("../tmp_client_public_key.json", message, original_sign);
 
             std::cout << message;
